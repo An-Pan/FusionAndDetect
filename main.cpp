@@ -8,6 +8,7 @@
 #include "args_parser.h"
 #include "configs.h"
 #include "CameraObjectDetect.h"
+#include "CoordinateCvt.h"
 
 #include "Cluster.h"
 #include "utils.h"
@@ -19,6 +20,7 @@ using namespace std;
 void readPCDfile(const std::string finname, std::vector<cv::Point3d>& points);
 
 bool readGPS(const std::string filename, cv::Point3d& imu_pos);
+bool readGPS(const std::string filename, Pos& imu_pos);
 
 void PointQucikSort(const std::vector<DbscanPoint>& db_points, std::vector<size_t>& sort_index);
 
@@ -385,9 +387,11 @@ int main_test()
 
 int main()
 {
+    std::shared_ptr<CoordinateCvt> coord_cvt_ptr = std::make_shared<CoordinateCvt>();
+
     std::shared_ptr<CameraObjectDetect> detect_ptr = std::make_shared<CameraObjectDetect>();
 
-    string baseic_path = "/media/ibd02/Record-Pan/01Yunzhou/10.19数据/下午有目标GPS的数据/camera1/1571475169481/";
+    string baseic_path = "/media/ibd02/Record-Pan/01Yunzhou/10.19数据/下午有目标GPS的数据/camera1/1571474955837/";
 
     detect_ptr->Init("/home/ibd02/Project/yunzhou/Yolo/TensorRT-Yolov3-caffe/yolov3_fp16.engine");
 
@@ -405,20 +409,27 @@ int main()
 
     boost::filesystem::create_directory(baseic_path+"res_new/");  //文件夹不存在。创建
     std::vector<cv::Point2d> image_points_pro;
-    std::ofstream file_trace(baseic_path + "trace.txt");
+    std::ofstream file_trace(baseic_path + "1571474955837traceEx.txt");
 
     std::vector<cv::Point3d> trace_points;
     //int total_num = ;
-    for(int i =0;i<61;i++){
+    for(int i =0;i<73;i++){
         std::cout << "processing index = "<<i << endl;
 
 
 
         image_points_pro.clear();
         string name = std::to_string(i);
-
+        /*
         cv::Point3d imu_pos;
-        if(!readGPS(ins_path+name+"ex.txt",imu_pos)){
+        if(!readGPS(ins_path+name+"mo.txt",imu_pos)){
+            continue;
+        }
+
+        */
+
+        Pos imu_pos;
+        if(!readGPS(ins_path+name+"mo.txt",imu_pos)){
             continue;
         }
 
@@ -438,10 +449,10 @@ int main()
         cv::projectPoints(lidar_poitns,rvec,tvec,camera_matrix,cv::Mat(),image_points_pro);
         std::vector<cv::Point3d> object_3d;
         std::vector<cv::Point2d> object_2d;
-        for(int i=0;i<image_points_pro.size();i++){
+        for(int j=0;j<image_points_pro.size();j++){
 
-            int u = image_points_pro[i].x;
-            int v = image_points_pro[i].y;
+            int u = image_points_pro[j].x;
+            int v = image_points_pro[j].y;
 
             if(u < 0 || u > image.cols-1 || v < 0 || v > image.rows-1){
                 continue;
@@ -479,8 +490,17 @@ int main()
 
         //cout << "ave_dpth = " << ave_depth <<endl;
 
+        std::ofstream file_pcd("map03.txt");
+        for(auto it : lidar_poitns){
+            cv::Point3d src_pt(it.x,it.y,it.z);
+            cv::Point3d dst_pt;
+            coord_cvt_ptr->CvtIMU2World(src_pt,dst_pt,imu_pos);
 
+            file_pcd << std::setprecision(16)<< dst_pt.x << ","<<std::setprecision(16)<< dst_pt.y<< ","<<dst_pt.z<<endl;
+
+        }
         //continue;
+ //       file_pcd.close();
         double ave_x = 0.0;
         double ave_y = 0.0;
         double ave_z = 0.0;
@@ -495,9 +515,14 @@ int main()
         ave_y/=(double)(object_3d.size());
         ave_z/=(double)(object_3d.size());
 
+//        Eigen::Vector3d src_pt,dst_pt;
+//        src_pt << ave_x,ave_y,ave_z;
 
-
-        file_trace <<i <<","<<std::setprecision(16)<< ave_x + imu_pos.x<<","<<std::setprecision(16)<<ave_y + imu_pos.y<<","<<std::setprecision(16)<<ave_z + imu_pos.z<<endl;
+        cv::Point3d src_pt(ave_x,ave_y,ave_z);
+        cv::Point3d dst_pt;
+        coord_cvt_ptr->CvtIMU2World(src_pt,dst_pt,imu_pos);
+        file_trace << std::setprecision(16)<< dst_pt.x << ","<<std::setprecision(16)<< dst_pt.y<< ","<<dst_pt.z<<endl;
+        //file_trace <<i <<","<<std::setprecision(16)<< ave_x + imu_pos.x<<","<<std::setprecision(16)<<ave_y + imu_pos.y<<","<<std::setprecision(16)<<ave_z + imu_pos.z<<endl;
         //trace_points.push_back(cv::Point3d(-ave_x,-ave_y,ave_z));
 
 
@@ -682,8 +707,8 @@ void readPCDfile(const std::string finname, std::vector<cv::Point3d>& points)
 
 
 
-        if(cloud->points[i].y < 0)
-            continue;
+//        if(cloud->points[i].y < 0)
+//            continue;
         points.push_back(cv::Point3d(cloud->points[i].x,cloud->points[i].y,cloud->points[i].z));
     }
 
@@ -759,6 +784,42 @@ bool readGPS(const std::string filename, cv::Point3d& imu_pos)
         imu_pos.x = x;
         imu_pos.y = y;
         imu_pos.z = z;
+        break;
+    }
+
+    return true;
+}
+
+
+bool readGPS(const std::string filename, Pos& imu_pos)
+{
+    ifstream file_in(filename);
+    char buf[1024] = {0};
+    while(file_in.getline(buf,1024)){
+        string strbuf = buf;
+        vector<string> items;
+        boost::algorithm::trim(strbuf);
+
+        boost::split(items,strbuf,boost::is_any_of(" "));
+
+        if(items.size() < 20)
+            return false;
+
+        double x = boost::lexical_cast<double>(items[17]);
+        double y = boost::lexical_cast<double>(items[18]);
+        double z = boost::lexical_cast<double>(items[19]);
+
+        double heading = boost::lexical_cast<double>(items[4]);
+        double pitch = boost::lexical_cast<double>(items[5]);
+        double roll = boost::lexical_cast<double>(items[6]);
+
+
+        imu_pos.t_x = x;
+        imu_pos.t_y = y;
+        imu_pos.t_z = z;
+        imu_pos.heading = heading;
+        imu_pos.pitch = roll;
+        imu_pos.roll = pitch;
         break;
     }
 
