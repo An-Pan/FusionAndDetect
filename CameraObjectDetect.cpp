@@ -15,18 +15,19 @@ bool CameraObjectDetect::Init(const std::string engine_file)
 
 void CameraObjectDetect::DetectImage(const cv::Mat& frame)
 {
-    if(frame.empty()){
+  if(frame.empty()){
         return;
     }
-
+    vector<float> inputData;
+    inputData.reserve(h_*w_*c_*2);
     vector<float> cur_input = PrepareImage(frame);
 
     int outputCount = net_->getOutputSize()/sizeof(float);
     unique_ptr<float[]> outputData(new float[outputCount]);
-
+    inputData.insert(inputData.end(), cur_input.begin(), cur_input.end());
 
     // batchCount == 1
-    net_->doInference(cur_input.data(), outputData.get(),1);
+    net_->doInference(inputData.data(), outputData.get(),1);
 
     auto output = outputData.get();
     auto outputSize = net_->getOutputSize()/ sizeof(float) / 1;
