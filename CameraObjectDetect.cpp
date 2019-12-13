@@ -38,7 +38,14 @@ void CameraObjectDetect::DetectImage(const cv::Mat& frame)
     result.resize(detCount);
     memcpy(result.data(), &output[1], detCount*sizeof(Yolo::Detection));
 
-    this->bboxs_ = PostProcessImg(frame,result,class_num_);
+    vector<Yolo::Detection> result_filter;
+    for(auto it:result){
+        if(it.prob < confidence_)
+            continue;
+        result_filter.push_back(it);
+    }
+
+    this->bboxs_ = PostProcessImg(frame,result_filter,class_num_);
 }
 
 void CameraObjectDetect::ShowDebug(cv::Mat& img)
