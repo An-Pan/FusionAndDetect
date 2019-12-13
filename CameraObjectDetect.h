@@ -49,7 +49,8 @@ private:
 
 
     vector<Bbox> bboxs_;
-    int class_num_ = 80;
+    //int class_num_ = 80;
+    int class_num_ = 6;         // boat modle
     int w_ = 608;
     int h_ = 608;
     int c_ = 3;
