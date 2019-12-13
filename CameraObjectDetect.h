@@ -54,6 +54,7 @@ private:
     int h_ = 608;
     int c_ = 3;
     float nms_ = 0.45;
+    float confidence_ = 0.7;
 
 };
 
